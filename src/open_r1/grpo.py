@@ -17,6 +17,10 @@ import os
 import re
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime
+
+from dotenv import load_dotenv
+load_dotenv(verbose=True)
 
 import datasets
 import torch
@@ -52,38 +56,40 @@ class GRPOScriptArguments(ScriptArguments):
 
 
 def accuracy_reward(completions, solution, **kwargs):
-    """Reward function that checks if the completion is the same as the ground truth."""
+    """Reward function that checks if the completion is correct using either symbolic verification or exact string matching."""
     contents = [completion[0]["content"] for completion in completions]
     rewards = []
+    current_time = datetime.now().strftime("%d-%H-%M-%S-%f")
     for content, sol in zip(contents, solution):
-        gold_parsed = parse(sol, extraction_mode="first_match", extraction_config=[LatexExtractionConfig()])
-        if len(gold_parsed) != 0:
-            # We require the answer to be provided in correct latex (no malformed operators)
-            answer_parsed = parse(
-                content,
-                extraction_config=[
-                    LatexExtractionConfig(
-                        normalization_config=NormalizationConfig(
-                            nits=False,
-                            malformed_operators=False,
-                            basic_latex=True,
-                            equations=True,
-                            boxed=True,
-                            units=True,
-                        ),
-                        # Ensures that boxed is tried first
-                        boxed_match_priority=0,
-                        try_extract_without_anchor=False,
-                    )
-                ],
-                extraction_mode="first_match",
-            )
-            # Reward 1 if the content is the same as the ground truth, 0 otherwise
-            reward = float(verify(answer_parsed, gold_parsed))
-        else:
-            # If the gold solution is not parseable, we reward 1 to skip this example
-            reward = 1.0
-            print("Failed to parse gold solution: ", sol)
+        reward = 0.0
+        # Try symbolic verification first
+        try:
+            answer = parse(content)
+            if float(verify(answer, parse(sol))) > 0:
+                reward = 1.0
+        except Exception:
+            pass  # Continue to next verification method if this fails
+
+        # If symbolic verification failed, try string matching
+        if reward == 0.0:
+            try:
+                # Extract answer from solution if it has think/answer tags
+                sol_match = re.search(r'<answer>(.*?)</answer>', sol)
+                ground_truth = sol_match.group(1).strip() if sol_match else sol.strip()
+
+                # Extract answer from content if it has think/answer tags
+                content_match = re.search(r'<answer>(.*?)</answer>', content)
+                student_answer = content_match.group(1).strip() if content_match else content.strip()
+
+                # Compare the extracted answers
+                if student_answer == ground_truth:
+                    reward = 1.0
+            except Exception:
+                pass  # Keep reward as 0.0 if both methods fail
+
+        print("Content: ", content)
+        print("Solution: ", sol)
+
         rewards.append(reward)
 
     return rewards
@@ -91,7 +97,7 @@ def accuracy_reward(completions, solution, **kwargs):
 
 def format_reward(completions, **kwargs):
     """Reward function that checks if the completion has a specific format."""
-    pattern = r"^<think>.*?</think><answer>.*?</answer>$"
+    pattern = r"^<think>.*?</think>\s*<answer>.*?</answer>$"
     completion_contents = [completion[0]["content"] for completion in completions]
     matches = [re.match(pattern, content) for content in completion_contents]
     return [1.0 if match else 0.0 for match in matches]
@@ -153,10 +159,11 @@ def main(script_args, training_args, model_args):
 
     # Format into conversation
     def make_conversation(example):
+        PROBLEM_FORMAT = "{problem}  Output the thinking process in <think> </think> and final answer (e.g., the format should be like `A` or `A,B` or `40`) in <answer> </answer> tags."
         return {
             "prompt": [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": example["problem"]},
+                {"role": "user", "content": PROBLEM_FORMAT.format(problem=example["problem"])},
             ],
         }
 
@@ -216,9 +223,7 @@ def main(script_args, training_args, model_args):
 
     # Save everything else on main process
     kwargs = {
-        "finetuned_from": model_args.model_name_or_path,
-        "dataset": list(script_args.dataset_name),
-        "dataset_tags": list(script_args.dataset_name),
+        "dataset_name": script_args.dataset_name,
         "tags": ["open-r1"],
     }
     if trainer.accelerator.is_main_process:
