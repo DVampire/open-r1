@@ -37,7 +37,13 @@ from trl import GRPOTrainer, ModelConfig, ScriptArguments, TrlParser, get_peft_c
 
 
 logger = logging.getLogger(__name__)
+# add console handler
+console = logging.StreamHandler()
+logger.addHandler(console)
 
+# add file handler
+file_handler = logging.FileHandler("logs.log")
+logger.addHandler(file_handler)
 
 @dataclass
 class GRPOScriptArguments(ScriptArguments):
@@ -87,9 +93,8 @@ def accuracy_reward(completions, solution, **kwargs):
             except Exception:
                 pass  # Keep reward as 0.0 if both methods fail
 
-        print("Content: ", content)
-        print("Solution: ", sol)
-
+        logger.info("Content: "+ content)
+        logger.info("Solution: "+ sol)
         rewards.append(reward)
 
     return rewards
@@ -248,7 +253,6 @@ def main(script_args, training_args, model_args):
     if training_args.push_to_hub:
         logger.info("Pushing to hub...")
         trainer.push_to_hub(**kwargs)
-
 
 if __name__ == "__main__":
     parser = TrlParser((GRPOScriptArguments, GRPOConfig, ModelConfig))

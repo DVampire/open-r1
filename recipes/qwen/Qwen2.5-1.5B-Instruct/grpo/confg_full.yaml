@@ -22,7 +22,8 @@ gradient_accumulation_steps: 16
 gradient_checkpointing: true
 gradient_checkpointing_kwargs:
   use_reentrant: false
-hub_model_id: Qwen2.5-1.5B-Instruct-Open-R1-GRPO
+hub_model_id: zwt963/Qwen2.5-1.5B-Instruct-Open-R1-GRPO
+hub_token: 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
 hub_strategy: every_save
 learning_rate: 2.0e-05
 log_level: info
@@ -30,7 +31,7 @@ logging_steps: 10
 logging_strategy: steps
 lr_scheduler_type: cosine
 max_prompt_length: 1024
-max_completion_length: 4096
+max_completion_length: 2048
 max_steps: -1
 num_train_epochs: 10
 output_dir: workdir/Qwen2.5-1.5B-Instruct-Open-R1-GRPO

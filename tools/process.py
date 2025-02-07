@@ -33,7 +33,6 @@ class ProcessACCA():
         else:
             res_str = ""
 
-        res_str = f"<answer>{res_str}</answer>"
         return res_str
 
     def _parse_problem(self, problem: str):
@@ -56,7 +55,7 @@ class ProcessACCA():
         for index, row in df.iterrows():
             item = {
                 "problem": row["problem"],
-                "solution": row["answer"]
+                "answer": row["answer"]
             }
             datas.append(item)
 
@@ -69,7 +68,7 @@ class ProcessACCA():
         for index, row in df.iterrows():
             item = {
                 "problem": row["problem"],
-                "solution": row["answer"]
+                "answer": row["answer"]
             }
             datas.append(item)
         return datas
